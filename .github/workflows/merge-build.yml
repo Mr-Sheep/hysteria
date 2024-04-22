@@ -1,0 +1,89 @@
+name: Merge with Upstream and Build Hysteria
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  merge-build:
+    runs-on: ubuntu-latest
+    env: 
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # fetch all history for all tags and branches
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/apernet/hysteria.git
+
+      - name: Fetch latest upstream changes
+        run: git fetch upstream --tags
+
+      - name: check upstream new releases
+        run: |
+          UPSTREAM_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+          echo "upstream_tag=$UPSTREAM_TAG" >> $GITHUB_ENV
+          CURRENT_TAG=$(git describe --tags --always)
+          if [ "$UPSTREAM_TAG" != "$CURRENT_TAG" ]; then
+            echo "new_release_found=true" >> $GITHUB_ENV
+            git merge refs/tags/$UPSTREAM_TAG --no-commit --no-edit --strategy-option ours
+          else
+            echo "new_release_found=false" >> $GITHUB_ENV
+          fi
+      - name: unstage workflow and push
+        if: env.new_release_found == 'true'
+        run: |
+          git reset -- .github/workflows
+          git commit -m "sync with upstream under $upstream_tag"
+          git push origin ${GITHUB_REF_NAME}
+      - name: Get version
+        if: env.new_release_found == 'true'
+        id: get_version
+        run: |
+          echo "version=$(git describe --tags --always --match 'app/v*' | sed -n 's|app/\([^/-]*\)\(-.*\)\{0,1\}|\1|p')" >> $GITHUB_OUTPUT
+          echo "$GITHUB_OUTPUT"
+      - name: Setup Go
+        if: env.new_release_found == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Setup Python # This is for the build script
+        if: env.new_release_found == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: nttld/setup-ndk@v1
+        if: env.new_release_found == 'true'
+        id: setup-ndk
+        with:
+          ndk-version: r26b
+          add-to-path: false
+
+      - name: Run build script
+        if: env.new_release_found == 'true'
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          export HY_APP_PLATFORMS=$(sed 's/\r$//' platforms.txt | awk '!/^#/ && !/^$/' | paste -sd ",")
+          python hyperbole.py build -r
+      - name: Generate hashes
+        if: env.new_release_found == 'true'
+        run: |
+          for file in build/*; do
+            sha256sum $file >> build/hashes.txt
+          done
+      - name: Upload GitHub
+        if: env.new_release_found == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: $upstream_tag
+          files: build/*
