@@ -44,8 +44,8 @@ jobs:
         run: |
           git reset -- .github/workflows
           git commit -m "sync with upstream under $upstream_tag"
-          git tag $upstream_tag
           git push origin ${GITHUB_REF_NAME}
+          git push origin ${{ env.upstream_tag }}
 
       - name: Get version
         if: env.new_release_found == 'true'
