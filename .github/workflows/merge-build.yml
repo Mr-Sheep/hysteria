@@ -52,7 +52,7 @@ jobs:
         run: |
           echo "version=$(git describe --tags --always --match 'app/v*' | sed -n 's|app/\([^/-]*\)\(-.*\)\{0,1\}|\1|p')" >> $GITHUB_OUTPUT
           echo "$GITHUB_OUTPUT"
-          
+
       - name: Setup Go
         if: env.new_release_found == 'true'
         uses: actions/setup-go@v5
@@ -91,4 +91,5 @@ jobs:
         if: env.new_release_found == 'true'
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: $upstream_tag
           files: build/*
