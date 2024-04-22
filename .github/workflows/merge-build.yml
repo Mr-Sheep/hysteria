@@ -45,13 +45,14 @@ jobs:
           git reset -- .github/workflows
           git commit -m "sync with upstream under $upstream_tag"
           git push origin ${GITHUB_REF_NAME}
-          git push origin ${{ env.upstream_tag }}
 
       - name: Get version
         if: env.new_release_found == 'true'
         id: get_version
-        run: echo "version=$(git describe --tags --always --match 'app/v*' | sed -n 's|app/\([^/-]*\)\(-.*\)\{0,1\}|\1|p')" >> $GITHUB_OUTPUT
-
+        run: |
+          echo "version=$(git describe --tags --always --match 'app/v*' | sed -n 's|app/\([^/-]*\)\(-.*\)\{0,1\}|\1|p')" >> $GITHUB_OUTPUT
+          echo "$GITHUB_OUTPUT"
+          
       - name: Setup Go
         if: env.new_release_found == 'true'
         uses: actions/setup-go@v5
